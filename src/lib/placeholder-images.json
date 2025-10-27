@@ -1,0 +1,40 @@
+{
+  "placeholderImages": [
+    {
+      "id": "achievement-sleep",
+      "description": "Badge for maintaining a good sleep schedule.",
+      "imageUrl": "https://images.unsplash.com/photo-1570751485906-b0bbe415db74?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxtb29uJTIwc3RhcnN8ZW58MHx8fHwxNzYxNTgzMjY4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "moon stars"
+    },
+    {
+      "id": "achievement-study",
+      "description": "Badge for consistent study habits.",
+      "imageUrl": "https://images.unsplash.com/photo-1622701361344-c1df43ca29ee?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxib29rJTIwb3BlbnxlbnwwfHx8fDE3NjE1NDI4MTB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "book open"
+    },
+    {
+      "id": "achievement-balance",
+      "description": "Badge for achieving a good study-life balance.",
+      "imageUrl": "https://images.unsplash.com/photo-1624291617421-c86c99077838?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8eWluJTIweWFuZ3xlbnwwfHx8fDE3NjE1NzAwMDd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "yin yang"
+    },
+    {
+      "id": "achievement-first-check",
+      "description": "Badge for the first risk check-in.",
+      "imageUrl": "https://images.unsplash.com/photo-1667406556079-3f64ce676979?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxmaXJzdCUyMG1lZGFsfGVufDB8fHx8MTc2MTU4MzI2OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "first medal"
+    },
+    {
+      "id": "achievement-low-risk",
+      "description": "Badge for maintaining low risk for a week.",
+      "imageUrl": "https://images.unsplash.com/photo-1524055988636-436cfa46e59e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8Z3JlZW4lMjBsZWFmfGVufDB8fHx8MTc2MTUzMzI3M3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "green leaf"
+    },
+    {
+      "id": "achievement-streak",
+      "description": "Badge for a 7-day check-in streak.",
+      "imageUrl": "https://images.unsplash.com/photo-1543005472-1b1d37fa4eae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxmaXJlJTIwZmxhbWV8ZW58MHx8fHwxNzYxNTgzMjY4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "fire flame"
+    }
+  ]
+}

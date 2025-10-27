@@ -1,0 +1,17 @@
+run:
+  web: npm run dev -- --port $PORT --hostname 0.0.0.0
+  api: uvicorn api.main:app --host 0.0.0.0 --port 8080
+python:
+  version: 3.12
+  packages:
+  - fastapi==0.115.0
+  - uvicorn[standard]==0.30.6
+  - pydantic==2.9.2
+  - python-dotenv==1.0.1
+  - PyJWT==2.9.0
+  - firebase-admin==6.6.0
+  - numpy==2.3.4
+  - pandas==2.2.3
+  - scikit-learn==1.7.2
+  - joblib==1.4.2
+  - pyarrow
