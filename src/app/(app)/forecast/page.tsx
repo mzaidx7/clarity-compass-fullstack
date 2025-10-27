@@ -1,4 +1,4 @@
-'''"use client";
+"use client";
 
 import { useState } from 'react';
 import { useForm, FormProvider, Controller } from 'react-hook-form';
@@ -134,4 +134,3 @@ export default function ForecastPage() {
     </div>
   );
 }
-'''
