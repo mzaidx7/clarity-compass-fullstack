@@ -13,7 +13,8 @@ import type {
   SurveyHistoryResponse,
   SurveySaveFullRequest,
   CalendarEventServer,
-  CalendarEventCreateServer
+  CalendarEventCreateServer,
+  CalendarMonthDaysResponse
 } from './types';
 
 const MOCK_LATENCY_MS = 600;
@@ -27,6 +28,28 @@ export const setAuthToken = (token: string | null) => {
 const getAuthHeaders = (): Record<string, string> => {
   return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
 };
+
+type ApiResult<T> = { data?: T; error?: string };
+
+async function http<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+  try {
+    const res = await fetch(path, {
+      ...init,
+      headers: {
+        ...(init?.headers || {}),
+        ...getAuthHeaders(),
+      } as HeadersInit,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { error: text || `HTTP ${res.status}` };
+    }
+    const json = (await res.json()) as T;
+    return { data: json };
+  } catch (e: any) {
+    return { error: e?.message || 'Network error' };
+  }
+}
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -100,6 +123,26 @@ const mockApi = {
     await new Promise(resolve => setTimeout(resolve, MOCK_LATENCY_MS));
     console.log("Saving survey data (mock):", data);
     return { status: 'ok', message: 'Risk assessment saved successfully.' };
+  },
+  getSurveyHistory: async (limit: number = 20): Promise<SurveyHistoryResponse> => {
+    await new Promise(r => setTimeout(r, MOCK_LATENCY_MS));
+    return { items: [] };
+  },
+  getCalendarEvents: async (date?: string): Promise<CalendarEventServer[]> => {
+    await new Promise(r => setTimeout(r, MOCK_LATENCY_MS));
+    return [];
+  },
+  addCalendarEvent: async (event: CalendarEventCreateServer): Promise<CalendarEventServer> => {
+    await new Promise(r => setTimeout(r, MOCK_LATENCY_MS));
+    return { id: String(Date.now()), ...event } as CalendarEventServer;
+  },
+  deleteCalendarEvent: async (id: string): Promise<{ status: string }> => {
+    await new Promise(r => setTimeout(r, MOCK_LATENCY_MS));
+    return { status: 'ok' };
+  },
+  getCalendarMonthDays: async (year: number, month: number): Promise<CalendarMonthDaysResponse> => {
+    await new Promise(r => setTimeout(r, MOCK_LATENCY_MS));
+    return { days: [] };
   },
   saveSurveyFull: async (payload: SurveySaveFullRequest): Promise<{ status: string, message: string }> => {
     await new Promise(resolve => setTimeout(resolve, MOCK_LATENCY_MS));
@@ -179,109 +222,133 @@ const mockApi = {
 
 const liveApi = {
     health: async (): Promise<HealthResponse> => {
-        const response = await fetch(`${API_BASE_URL}/auth/health`);
-        if (!response.ok) throw new Error('Failed to fetch health');
-        return response.json();
+        const r = await http<HealthResponse>(`${API_BASE_URL}/auth/health`);
+        if (r.error || !r.data) throw new Error(r.error || 'Failed to fetch health');
+        return r.data;
     },
     status: async (): Promise<ModelStatusResponse> => {
-        const response = await fetch(`${API_BASE_URL}/predict/status`);
-        if (!response.ok) throw new Error('Failed to fetch status');
-        return response.json();
+        const r = await http<ModelStatusResponse>(`${API_BASE_URL}/predict/status`);
+        if (r.error || !r.data) throw new Error(r.error || 'Failed to fetch status');
+        return r.data;
     },
     predict: async (data: SurveyRequest): Promise<PredictionResponse> => {
-        const response = await fetch(`${API_BASE_URL}/predict`, {
+        const r = await http<PredictionResponse>(`${API_BASE_URL}/predict`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
-        if (!response.ok) throw new Error('Prediction failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Prediction failed');
+        return r.data;
     },
     saveSurvey: async (data: SurveyRequest): Promise<{ status: string, message: string }> => {
-        const response = await fetch(`${API_BASE_URL}/survey/save`, {
+        const r = await http<{ status: string, message: string }>(`${API_BASE_URL}/survey/save`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
-        if (!response.ok) throw new Error('Save survey failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Save survey failed');
+        return r.data;
     },
     saveSurveyFull: async (payload: SurveySaveFullRequest): Promise<{ status: string, message: string }> => {
-        const response = await fetch(`${API_BASE_URL}/survey/save_full`, {
+        const r = await http<{ status: string, message: string }>(`${API_BASE_URL}/survey/save_full`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-        if (!response.ok) throw new Error('Save survey failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Save survey failed');
+        return r.data;
     },
     predictFused: async (data: FusedPredictRequest): Promise<FusedPredictResponse> => {
-        const response = await fetch(`${API_BASE_URL}/predict/fused`, {
+        const r = await http<FusedPredictResponse>(`${API_BASE_URL}/predict/fused`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
-        if (!response.ok) throw new Error('Fused prediction failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Fused prediction failed');
+        return r.data;
     },
     forecast: async (data: ForecastRequest): Promise<ForecastResponse> => {
-        const response = await fetch(`${API_BASE_URL}/forecast`, {
+        const r = await http<ForecastResponse>(`${API_BASE_URL}/forecast`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
-        if (!response.ok) throw new Error('Forecast failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Forecast failed');
+        return r.data;
     },
     devLogin: async (data: DevLoginRequest): Promise<DevLoginResponse> => {
-        const response = await fetch(`${API_BASE_URL}/auth/dev-login`, {
+        const res = await fetch(`${API_BASE_URL}/auth/dev-login`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         });
-        if (!response.ok) {
-            throw new Error('Dev login failed');
-        }
-        const json = await response.json();
-        // Backend may return { token } whereas frontend expects { access_token }
+        if (!res.ok) throw new Error('Dev login failed');
+        const json = await res.json();
         if (json && typeof json === 'object' && 'token' in json && !('access_token' in json)) {
             return { access_token: json.token } as DevLoginResponse;
         }
         return json as DevLoginResponse;
     },
     getSurveyHistory: async (limit: number = 20): Promise<SurveyHistoryResponse> => {
-        const response = await fetch(`${API_BASE_URL}/survey/history?limit=${limit}`, {
-            headers: { ...getAuthHeaders() },
-        });
-        if (!response.ok) throw new Error('Fetch history failed');
-        return response.json();
+        const r = await http<SurveyHistoryResponse>(`${API_BASE_URL}/survey/history?limit=${limit}`);
+        if (r.error || !r.data) throw new Error(r.error || 'Fetch history failed');
+        return r.data;
     },
     getCalendarEvents: async (date?: string): Promise<CalendarEventServer[]> => {
         const url = new URL(`${API_BASE_URL}/calendar/events`);
         if (date) url.searchParams.set('date', date);
-        const response = await fetch(url.toString(), { headers: { ...getAuthHeaders() } });
-        if (!response.ok) throw new Error('Fetch events failed');
-        return response.json();
+        const r = await http<CalendarEventServer[]>(url.toString());
+        if (r.error || !r.data) throw new Error(r.error || 'Fetch events failed');
+        return r.data;
     },
     addCalendarEvent: async (event: CalendarEventCreateServer): Promise<CalendarEventServer> => {
-        const response = await fetch(`${API_BASE_URL}/calendar/events`, {
+        const r = await http<CalendarEventServer>(`${API_BASE_URL}/calendar/events`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(event),
         });
-        if (!response.ok) throw new Error('Add event failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Add event failed');
+        return r.data;
     },
     deleteCalendarEvent: async (id: string): Promise<{ status: string }> => {
-        const response = await fetch(`${API_BASE_URL}/calendar/events/${id}`, {
+        const r = await http<{ status: string }>(`${API_BASE_URL}/calendar/events/${id}`, {
             method: 'DELETE',
-            headers: { ...getAuthHeaders() },
         });
-        if (!response.ok) throw new Error('Delete event failed');
-        return response.json();
+        if (r.error || !r.data) throw new Error(r.error || 'Delete event failed');
+        return r.data;
     },
+    getCalendarMonthDays: async (year: number, month: number): Promise<CalendarMonthDaysResponse> => {
+        const url = new URL(`${API_BASE_URL}/calendar/events/month`);
+        url.searchParams.set('year', String(year));
+        url.searchParams.set('month', String(month));
+        const r = await http<CalendarMonthDaysResponse>(url.toString());
+        if (r.error || !r.data) throw new Error(r.error || 'Fetch month days failed');
+        return r.data;
+    },
+};
+
+// Safe API that always returns {data?, error?}
+export const apiSafe = {
+  health: () => http<HealthResponse>(`${API_BASE_URL}/auth/health`),
+  status: () => http<ModelStatusResponse>(`${API_BASE_URL}/predict/status`),
+  predict: (body: SurveyRequest) => http<PredictionResponse>(`${API_BASE_URL}/predict`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  saveSurveyFull: (payload: SurveySaveFullRequest) => http<{ status: string }>(`${API_BASE_URL}/survey/save_full`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
+  history: (limit = 20) => http<SurveyHistoryResponse>(`${API_BASE_URL}/survey/history?limit=${limit}`),
+  predictFused: (body: FusedPredictRequest) => http<FusedPredictResponse>(`${API_BASE_URL}/predict/fused`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  forecast: (body: ForecastRequest) => http<ForecastResponse>(`${API_BASE_URL}/forecast`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  calendarList: (date?: string) => {
+    const url = new URL(`${API_BASE_URL}/calendar/events`);
+    if (date) url.searchParams.set('date', date);
+    return http<CalendarEventServer[]>(url.toString());
+  },
+  calendarAdd: (e: CalendarEventCreateServer) => http<CalendarEventServer>(`${API_BASE_URL}/calendar/events`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e) }),
+  calendarDelete: (id: string) => http<{ status: string }>(`${API_BASE_URL}/calendar/events/${id}`, { method: 'DELETE' }),
+  calendarMonthDays: (year: number, month: number) => {
+    const url = new URL(`${API_BASE_URL}/calendar/events/month`);
+    url.searchParams.set('year', String(year));
+    url.searchParams.set('month', String(month));
+    return http<CalendarMonthDaysResponse>(url.toString());
+  },
 };
 
 export const api = USE_MOCK_API ? mockApi : liveApi;

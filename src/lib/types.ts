@@ -95,11 +95,13 @@ export type CalendarEventServer = {
 };
 
 export type CalendarEventCreateServer = Omit<CalendarEventServer, 'id'>;
+export type CalendarMonthDaysResponse = { days: { date: string; count: number }[] };
 
 export type SurveyHistoryItem = {
   timestamp: string;
   input: SurveyRequest;
   result: PredictionResponse | null;
+  fused?: FusedPredictResponse | null;
 };
 
 export type SurveyHistoryResponse = {
@@ -110,4 +112,5 @@ export type SurveySaveFullRequest = {
   input: SurveyRequest;
   result?: PredictionResponse | null;
   timestamp?: string;
+  fused?: FusedPredictResponse | null;
 };

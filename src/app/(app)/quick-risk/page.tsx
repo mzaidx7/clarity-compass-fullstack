@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { clamp, roundDisplay, levelToColor } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import type { PredictionResponse, SurveyRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
@@ -49,7 +50,8 @@ export default function QuickRiskPage() {
     setPrediction(null);
     try {
       const result = await api.predict(data);
-      setPrediction(result);
+      const clamped = clamp(result.burnout_score);
+      setPrediction({ ...result, burnout_score: Number(clamped.toFixed(2)) });
     } catch (e) {
       setError("An error occurred while fetching the prediction.");
     } finally {
@@ -61,7 +63,7 @@ export default function QuickRiskPage() {
     setIsSaving(true);
     const data = form.getValues();
     try {
-      const response = await api.saveSurveyFull({ input: data, result: prediction });
+      const response = await api.saveSurveyFull({ input: data, result: prediction ? { ...prediction, burnout_score: Number(prediction.burnout_score.toFixed(2)) } as any : null, timestamp: new Date().toISOString() });
       // Also persist to local history for Progress page
       try {
         const key = user?.id ? `cc_history_${user.id}` : `cc_history_local`;
@@ -71,10 +73,7 @@ export default function QuickRiskPage() {
         existing.push(entry);
         localStorage.setItem(key, JSON.stringify(existing));
       } catch {}
-      toast({
-        title: "Success",
-        description: response.message,
-      });
+      toast({ title: "Saved ✅", description: response.message });
     } catch (e) {
       toast({
         variant: "destructive",
@@ -86,11 +85,7 @@ export default function QuickRiskPage() {
     }
   }
 
-  const getRiskColor = (risk: 'Low' | 'Moderate' | 'High') => {
-    if (risk === 'Low') return 'text-green-500';
-    if (risk === 'Moderate') return 'text-amber-500';
-    return 'text-red-500';
-  };
+  const getRiskColor = (risk: 'Low' | 'Moderate' | 'High') => levelToColor(risk as any).text;
 
   return (
     <div className="container mx-auto max-w-4xl p-0">
@@ -149,7 +144,7 @@ export default function QuickRiskPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Burnout Score</p>
                   <p className={`text-6xl font-bold ${getRiskColor(prediction.risk_label)}`}>
-                    {prediction.burnout_score}
+                    {roundDisplay(prediction.burnout_score)}
                   </p>
                 </div>
                 <div>

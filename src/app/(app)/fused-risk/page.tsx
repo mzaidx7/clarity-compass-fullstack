@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from '@/components/ui/separator';
 import { Loader2, AlertCircle, HelpCircle } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, apiSafe } from '@/lib/api';
 import type { FusedPredictResponse, FusedPredictRequest } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 
@@ -59,14 +60,23 @@ export default function FusedRiskPage() {
     setError(null);
     setPrediction(null);
     try {
-      const result = await api.predictFused(data);
-      setPrediction(result);
+      const r = await apiSafe.predictFused(data as any);
+      if (r.error || !r.data) throw new Error(r.error || 'Predict failed');
+      setPrediction(r.data);
     } catch (e) {
       setError("An error occurred while fetching the prediction.");
     } finally {
       setIsLoading(false);
     }
   };
+
+  const onSave = async () => {
+    if (!prediction) return;
+    try {
+      const res = await apiSafe.saveSurveyFull({ input: { sleep_hours: 0, study_hours: 0, assignments_due: 0, exams_within_7d: 0 } as any, fused: prediction, timestamp: new Date().toISOString() });
+      if (res.error) throw new Error(res.error);
+    } catch {}
+  }
   
   return (
     <div className="container mx-auto max-w-4xl p-0">
@@ -84,10 +94,11 @@ export default function FusedRiskPage() {
           <CardContent>
             <FormProvider {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <Accordion type="single" collapsible defaultValue='item-1'>
+                <Accordion type="multiple" defaultValue={['item-1','item-2']}>
                   <AccordionItem value='item-1'>
                     <AccordionTrigger>DASS-21 Stress Questions</AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-2">
+                      <p className="text-xs text-muted-foreground">Answer 0–3 based on the last week.</p>
                       {dass21StressQuestions.map((q, i) => (
                         <div key={i} className="space-y-2">
                           <Label>{i+1}. {q}</Label>
@@ -95,7 +106,16 @@ export default function FusedRiskPage() {
                             name={`s_answers.${i}`}
                             control={form.control}
                             render={({ field }) => (
-                                <Input type="number" {...field} min={0} max={3} />
+                              <RadioGroup value={String(field.value)} onValueChange={(v) => field.onChange(Number(v))} className="grid grid-cols-4 gap-2">
+                                {[0,1,2,3].map(v => (
+                                  <div key={v} className="flex items-center space-x-2">
+                                    <RadioGroupItem id={`s_${i}_${v}`} value={String(v)} />
+                                    <Label htmlFor={`s_${i}_${v}`} className="text-xs">
+                                      {v === 0 ? 'Did not apply at all' : v === 1 ? 'Applied to some degree' : v === 2 ? 'Applied a considerable degree' : 'Applied very much'}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </RadioGroup>
                             )}
                           />
                         </div>
@@ -124,7 +144,9 @@ export default function FusedRiskPage() {
                           <Controller
                               name="behavior.coding_hours"
                               control={form.control}
-                              render={({ field }) => <Input id="behavior.coding_hours" type="number" {...field} />}
+                              render={({ field }) => (
+                                <Input id="behavior.coding_hours" type="number" min={0} max={16} step={1} value={field.value ?? ''} onChange={field.onChange} onBlur={() => field.onChange(Math.max(0, Math.min(16, Number(field.value ?? 0))))} />
+                              )}
                           />
                       </div>
                       <div className="space-y-2">
@@ -132,7 +154,9 @@ export default function FusedRiskPage() {
                           <Controller
                               name="behavior.gaming_hours"
                               control={form.control}
-                              render={({ field }) => <Input id="behavior.gaming_hours" type="number" {...field} />}
+                              render={({ field }) => (
+                                <Input id="behavior.gaming_hours" type="number" min={0} max={16} step={1} value={field.value ?? ''} onChange={field.onChange} onBlur={() => field.onChange(Math.max(0, Math.min(16, Number(field.value ?? 0))))} />
+                              )}
                           />
                       </div>
                       <div className="space-y-2">
@@ -140,7 +164,9 @@ export default function FusedRiskPage() {
                           <Controller
                               name="behavior.social_media_hours"
                               control={form.control}
-                              render={({ field }) => <Input id="behavior.social_media_hours" type="number" {...field} />}
+                              render={({ field }) => (
+                                <Input id="behavior.social_media_hours" type="number" min={0} max={16} step={1} value={field.value ?? ''} onChange={field.onChange} onBlur={() => field.onChange(Math.max(0, Math.min(16, Number(field.value ?? 0))))} />
+                              )}
                           />
                       </div>
                     </AccordionContent>
@@ -170,6 +196,7 @@ export default function FusedRiskPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Final Fused Score</p>
                   <p className="text-6xl font-bold text-primary">{Math.round(prediction.final_score_0_100)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Final = 0.6 × Survey + 0.4 × Behavior (both 0–100)</p>
                 </div>
                 <Separator />
                 <div className="space-y-2">
@@ -190,16 +217,23 @@ export default function FusedRiskPage() {
                         )}
                     </div>
                 </div>
-                 {prediction.survey.top_drivers.length > 0 && (
+                {Array.isArray(prediction.survey.top_drivers) && prediction.survey.top_drivers.length > 0 && (
                     <div>
                         <p className="text-sm font-medium text-muted-foreground mb-2">Top Survey Drivers</p>
                         <div className="flex flex-wrap justify-center gap-2">
-                            {prediction.survey.top_drivers.map((driver, i) => (
-                                <Badge key={i} variant="secondary">{driver}</Badge>
-                            ))}
+                            {prediction.survey.top_drivers.map((driver: any, i: number) => {
+                                const label =
+                                  typeof driver === 'string'
+                                    ? driver
+                                    : driver?.feature
+                                      ? `${driver.feature}${typeof driver.weight === 'number' ? ` (${driver.weight.toFixed(2)})` : ''}`
+                                      : JSON.stringify(driver);
+                                return <Badge key={i} variant="secondary">{label}</Badge>;
+                            })}
                         </div>
                     </div>
                 )}
+                <Button className="w-full" onClick={onSave}>Save Result</Button>
               </div>
             )}
           </CardContent>

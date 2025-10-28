@@ -1,31 +1,17 @@
 
 "use client";
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, HeartPulse, BrainCircuit, Activity, Info } from 'lucide-react';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from '@/components/ui/chart';
-import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts';
-import { useTheme } from '@/components/theme-provider';
-
-const chartData = [
-  { day: "Mon", score: 35 },
-  { day: "Tue", score: 45 },
-  { day: "Wed", score: 42 },
-  { day: "Thu", score: 55 },
-  { day: "Fri", score: 50 },
-  { day: "Sat", score: 65 },
-  { day: "Sun", score: 60 },
-];
-
-const chartConfig = {
-  score: {
-    label: "Risk Score",
-    color: "hsl(var(--primary))",
-  },
-} satisfies ChartConfig;
+import { ChartContainer, ChartConfig } from '@/components/ui/chart';
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis } from 'recharts';
+import Gauge from '@/components/Gauge';
+import { cn } from '@/lib/utils';
+import { apiSafe } from '@/lib/api';
+import { toLocalDayKey, scoreToLevel, levelToColor, clamp } from '@/lib/utils';
 
 const featureCards = [
     { title: "Quick Risk", description: "Get a fast burnout risk score.", href:"/quick-risk", icon: HeartPulse },
@@ -34,91 +20,66 @@ const featureCards = [
     { title: "Check Status", description: "View system and model health.", href:"/status", icon: Info },
 ];
 
-const ScoreDial = ({ score, color }: { score: number, color: string }) => {
-    const { theme } = useTheme();
-    const circumference = 2 * Math.PI * 52;
-    const offset = circumference - (score / 100) * circumference;
-    const showGlow = theme === 'dark';
-
-    return (
-        <div className="relative w-64 h-64">
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 120 120">
-                {showGlow && (
-                    <defs>
-                        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-                            <feMerge>
-                                <feMergeNode in="blur" />
-                                <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                        </filter>
-                    </defs>
-                )}
-                
-                <circle cx="60" cy="60" r="58" fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
-                <circle cx="60" cy="60" r="48" fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
-                
-                <circle
-                    cx="60"
-                    cy="60"
-                    r="52"
-                    fill="none"
-                    stroke="hsl(var(--primary) / 0.15)"
-                    strokeWidth="8"
-                />
-
-                <circle
-                    cx="60"
-                    cy="60"
-                    r="52"
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="8"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                    strokeLinecap="round"
-                    transform="rotate(-90 60 60)"
-                    style={{ transition: "stroke-dashoffset 0.5s ease-out, stroke 0.5s ease-out" }}
-                    filter={showGlow ? "url(#glow)" : "none"}
-                />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-6xl font-bold" style={{ color: color, textShadow: showGlow ? `0 0 10px ${color}` : 'none' }}>{score}</span>
-                <span className="text-sm text-muted-foreground">Burnout Score</span>
-            </div>
-        </div>
-    );
-};
+const chartConfig = {
+  score: { label: 'Risk Score', color: 'hsl(var(--primary))' },
+} satisfies ChartConfig;
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  
-  const latestScore = chartData[chartData.length - 1].score;
+  const [latestScore, setLatestScore] = useState<number | null>(null);
+  const [latestLevelText, setLatestLevelText] = useState<string>('');
+  const [colorClass, setColorClass] = useState<string>('text-green-500');
+  const [chartData, setChartData] = useState<{ day: string; score: number; drivers?: string[]; hasData: boolean }[]>([]);
 
-  const { riskLabel, riskColor, riskDescription, dialColor } = useMemo(() => {
-    if (latestScore < 40) {
-      return {
-        riskLabel: "Low Risk",
-        riskColor: "text-green-500",
-        dialColor: "hsl(140 80% 60%)",
-        riskDescription: "Keep up the great work maintaining a healthy balance!",
-      };
-    } else if (latestScore < 70) {
-      return {
-        riskLabel: "Moderate Risk",
-        riskColor: "text-amber-500",
-        dialColor: "hsl(45, 90%, 55%)",
-        riskDescription: "Consider taking a break or reviewing your schedule.",
-      };
-    } else {
-      return {
-        riskLabel: "High Risk",
-        riskColor: "text-red-500",
-        dialColor: "hsl(0 90% 60%)",
-        riskDescription: "It's important to take immediate steps to reduce stress.",
-      };
-    }
-  }, [latestScore]);
+  useEffect(() => {
+    (async () => {
+      const history = await apiSafe.history(40);
+      const items = history.data?.items || [];
+      // Latest: prefer the last fused entry; otherwise last quick
+      const latestFused = [...items].reverse().find((it: any) => it.fused && typeof it.fused.final_score_0_100 === 'number');
+      const latestQuick = items[items.length - 1];
+      const chosen = latestFused || latestQuick;
+      if (chosen?.fused?.final_score_0_100 != null) {
+        const s = clamp(Number(chosen.fused.final_score_0_100));
+        setLatestScore(Math.round(s));
+        const lvl = scoreToLevel(s);
+        setLatestLevelText(lvl);
+        setColorClass(levelToColor(lvl).text);
+      } else if (chosen?.result?.burnout_score != null) {
+        const s = clamp(Number(chosen.result.burnout_score));
+        setLatestScore(Math.round(s));
+        const lvl = scoreToLevel(s);
+        setLatestLevelText(lvl);
+        setColorClass(levelToColor(lvl).text);
+      } else {
+        setLatestScore(null);
+      }
+
+      // Build last 7 days chart
+      const byDay = new Map<string, { score: number; drivers?: string[] }>();
+      for (const it of items) {
+        const day = toLocalDayKey(it.timestamp);
+        const val = it.fused?.final_score_0_100 != null ? clamp(Number(it.fused.final_score_0_100)) : clamp(Number(it.result?.burnout_score ?? 0));
+        const drivers = it.fused?.survey?.top_drivers || it.result?.top_drivers || [];
+        byDay.set(day, { score: val, drivers });
+      }
+      const today = new Date();
+      const days: { day: string; score: number; drivers?: string[]; hasData: boolean }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const key = toLocalDayKey(d);
+        const label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        if (byDay.has(key)) {
+          const v = byDay.get(key)!;
+          days.push({ day: label, score: Math.round(v.score), drivers: v.drivers as string[], hasData: true });
+        } else {
+          days.push({ day: label, score: 0, hasData: false });
+        }
+      }
+      setChartData(days);
+    })();
+  }, []);
 
 
   return (
@@ -130,15 +91,26 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-            <Card className="flex flex-col items-center justify-center gap-8 p-8 text-center">
-                <ScoreDial score={latestScore} color={dialColor} />
-                <div className='space-y-2'>
-                    <p className={`text-2xl font-bold ${riskColor}`}>{riskLabel}</p>
-                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">{riskDescription}</p>
-                </div>
-                 <Button asChild className="w-full max-w-xs">
+            <Card className="flex flex-col items-center justify-center gap-6 p-8 text-center">
+              {latestScore === null ? (
+                <>
+                  <p className="text-muted-foreground">No recent assessment yet. Take your first assessment.</p>
+                  <Button asChild className="w-full max-w-xs">
                     <Link href="/quick-risk">Take New Assessment <ArrowRight className="ml-2 h-4 w-4" /></Link>
-                </Button>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Gauge value={latestScore} colorClass={colorClass} glow size={220} />
+                  <div className='space-y-1'>
+                    <p className="text-sm text-muted-foreground">Current Level</p>
+                    <p className={cn('text-xl font-semibold', colorClass)}>{latestLevelText}</p>
+                  </div>
+                  <Button asChild className="w-full max-w-xs">
+                    <Link href="/quick-risk">Take New Assessment <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                  </Button>
+                </>
+              )}
             </Card>
             
              <Card>
@@ -157,9 +129,25 @@ export default function DashboardPage() {
                         axisLine={false}
                         stroke='hsl(var(--muted-foreground))'
                       />
-                      <ChartTooltip
+                      <Tooltip
                         cursor={false}
-                        content={<ChartTooltipContent indicator="dot" />}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const p = payload[0]?.payload as any;
+                          return (
+                            <div className="rounded-md border bg-popover p-2 text-popover-foreground shadow-md">
+                              <p className="text-xs text-muted-foreground">{p.day}</p>
+                              <p className="text-sm font-medium">Score: {p.score}</p>
+                              {Array.isArray(p.drivers) && p.drivers.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {p.drivers.slice(0, 3).map((d: any, i: number) => (
+                                    <span key={i} className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{typeof d === 'string' ? d : d?.feature ?? JSON.stringify(d)}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }}
                       />
                       <Bar dataKey="score" fill="var(--color-score)" radius={4} />
                     </BarChart>

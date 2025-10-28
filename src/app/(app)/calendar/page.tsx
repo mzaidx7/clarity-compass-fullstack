@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import EventCard from "@/components/calendar/EventCard";
+import { toLocalDayKey } from "@/lib/utils";
 
 type EventType = 'Exam' | 'Assignment' | 'Study Session' | 'Sleep' | 'Exercise/Break' | 'Meeting/Presentation' | 'Work Shift';
 
@@ -28,6 +30,8 @@ export default function CalendarPage() {
   const storageKey = user?.id ? `cc_calendar_${user.id}` : `cc_calendar_local`;
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const [events, setEvents] = useState<LocalEvent[]>([]);
+  const [month, setMonth] = useState<Date>(new Date());
+  const [eventCounts, setEventCounts] = useState<Map<string, number>>(new Map());
 
   // Form state
   const [title, setTitle] = useState("");
@@ -47,7 +51,7 @@ export default function CalendarPage() {
     (async () => {
       try {
         const date = selectedISO;
-        const items = await (await import('@/lib/api')).api.getCalendarEvents(date);
+        const items = await (await import('@/lib/api')).apiSafe.calendarList(date).then(r => r.data || []);
         setEvents(items as any);
       } catch {
         try {
@@ -58,12 +62,33 @@ export default function CalendarPage() {
     })();
   }, [storageKey, selectedISO]);
 
+  // Load markers for current month (counts per day)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await (await import('@/lib/api')).apiSafe.calendarMonthDays(month.getFullYear(), month.getMonth()+1);
+        const map = new Map<string, number>();
+        for (const d of (res.data?.days || [])) map.set(d.date, d.count);
+        setEventCounts(map);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [month]);
+
   const dayEvents = useMemo(() => {
     return events.filter(e => e.date === selectedISO);
   }, [events, selectedISO]);
 
+  const isTimeRangeValid = () => {
+    if (!start && !end) return true; // allow all-day
+    if (!start || !end) return false;
+    return end > start;
+  };
+
   const addEvent = async () => {
     if (!selectedISO || !title.trim()) return;
+    if (!isTimeRangeValid()) return;
     try {
       const created = await (await import('@/lib/api')).api.addCalendarEvent({
         title: title.trim(),
@@ -130,7 +155,23 @@ export default function CalendarPage() {
             <CardDescription>Pick a day to add or review events.</CardDescription>
           </CardHeader>
           <CardContent>
-            <DayPicker mode="single" selected={selectedDay} onSelect={setSelectedDay} />
+            <DayPicker
+              mode="single"
+              month={month}
+              onMonthChange={setMonth}
+              selected={selectedDay}
+              onSelect={setSelectedDay}
+              modifiers={{
+                eventLight: (day: Date) => (eventCounts.get(toLocalDayKey(day)) || 0) === 1,
+                eventMed: (day: Date) => (eventCounts.get(toLocalDayKey(day)) || 0) === 2,
+                eventHeavy: (day: Date) => (eventCounts.get(toLocalDayKey(day)) || 0) >= 3,
+              }}
+              modifiersClassNames={{
+                eventLight: 'relative after:content-[""] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1.5 after:h-1.5 after:rounded-full after:bg-primary/40',
+                eventMed: 'relative after:content-[""] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1.5 after:h-1.5 after:rounded-full after:bg-primary/70',
+                eventHeavy: 'relative after:content-[""] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-2 after:h-2 after:rounded-full after:bg-primary',
+              }}
+            />
           </CardContent>
         </Card>
 
@@ -171,7 +212,7 @@ export default function CalendarPage() {
               <Label htmlFor="desc">Description</Label>
               <Input id="desc" value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
-            <Button onClick={addEvent} className="w-full" disabled={!title || !selectedISO}>Add to {selectedISO || 'date'}</Button>
+            <Button onClick={addEvent} className="w-full" disabled={!title || !selectedISO || !isTimeRangeValid()}>Add to {selectedISO || 'date'}</Button>
           </CardContent>
         </Card>
       </div>
@@ -185,17 +226,7 @@ export default function CalendarPage() {
           <CardContent className="space-y-3">
             {dayEvents.length === 0 && <p className="text-sm text-muted-foreground">No events yet.</p>}
             {dayEvents.map(ev => (
-              <div key={ev.id} className="flex items-center justify-between rounded-md border p-2">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{ev.type}</Badge>
-                    <p className="font-medium">{ev.title}</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{ev.start || '--:--'} – {ev.end || '--:--'}</p>
-                  {ev.description && <p className="text-xs text-muted-foreground">{ev.description}</p>}
-                </div>
-                <Button variant="destructive" size="sm" onClick={() => deleteEvent(ev.id)}>Delete</Button>
-              </div>
+              <EventCard key={ev.id} ev={ev} onEdit={(id) => { const e = dayEvents.find(x=>x.id===id)!; setTitle(e.title); setType(e.type as any); setStart(e.start || ''); setEnd(e.end || ''); setDescription(e.description || ''); deleteEvent(id); }} onDelete={(id)=> { if (confirm('Delete this event?')) deleteEvent(id); }} />
             ))}
           </CardContent>
         </Card>
