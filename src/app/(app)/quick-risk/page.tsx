@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/hooks/use-auth';
 import type { PredictionResponse, SurveyRequest } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,6 +31,7 @@ export default function QuickRiskPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const form = useForm<QuickRiskFormValues>({
     resolver: zodResolver(quickRiskSchema),
@@ -59,7 +61,16 @@ export default function QuickRiskPage() {
     setIsSaving(true);
     const data = form.getValues();
     try {
-      const response = await api.saveSurvey(data);
+      const response = await api.saveSurveyFull({ input: data, result: prediction });
+      // Also persist to local history for Progress page
+      try {
+        const key = user?.id ? `cc_history_${user.id}` : `cc_history_local`;
+        const now = new Date().toISOString();
+        const entry = { timestamp: now, input: data, result: prediction };
+        const existing = JSON.parse(localStorage.getItem(key) || '[]');
+        existing.push(entry);
+        localStorage.setItem(key, JSON.stringify(existing));
+      } catch {}
       toast({
         title: "Success",
         description: response.message,

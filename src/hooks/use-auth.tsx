@@ -4,8 +4,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, setAuthToken } from '@/lib/api';
 import type { DevLoginRequest } from '@/lib/types';
-import { auth } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 
 // Helper functions to manage cookies for dev login
 const setCookie = (name: string, value: string, days: number) => {
@@ -73,33 +71,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // On mount, load user from the dev token cookie (no Firebase dependency)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: User | null) => {
-      if (firebaseUser) {
-        const idToken = await firebaseUser.getIdToken();
-        setToken(idToken);
-        setUser({ id: firebaseUser.uid });
-        eraseCookie('auth_token'); // Clean up dev token if it exists
-        setIsLoading(false);
-        
-        if (window.location.pathname === '/login') {
-            const redirectTo = searchParams.get('redirect_to');
-            router.replace(redirectTo || '/dashboard');
-        }
-      } else {
-        const devToken = getCookie('auth_token');
-        if (devToken) {
-            loadUserFromDevToken(devToken);
-        } else {
-            setToken(null);
-            setUser(null);
-        }
-        setIsLoading(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router, loadUserFromDevToken, searchParams]);
+    const devToken = getCookie('auth_token');
+    if (devToken) {
+      loadUserFromDevToken(devToken);
+    } else {
+      setToken(null);
+      setUser(null);
+    }
+    setIsLoading(false);
+  }, [loadUserFromDevToken]);
 
   const login = async (data: DevLoginRequest) => {
     const response = await api.devLogin(data);
@@ -111,7 +93,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await signOut(auth);
     eraseCookie('auth_token');
     setToken(null);
     setUser(null);

@@ -9,7 +9,11 @@ import type {
   HealthResponse,
   ModelStatusResponse,
   DevLoginRequest,
-  DevLoginResponse
+  DevLoginResponse,
+  SurveyHistoryResponse,
+  SurveySaveFullRequest,
+  CalendarEventServer,
+  CalendarEventCreateServer
 } from './types';
 
 const MOCK_LATENCY_MS = 600;
@@ -20,11 +24,31 @@ export const setAuthToken = (token: string | null) => {
   authToken = token;
 };
 
-const getAuthHeaders = () => {
+const getAuthHeaders = (): Record<string, string> => {
   return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+// Utility to generate a minimal unsigned JWT-like token for dev use
+const createFakeJwt = (userId: string): string => {
+  const header = { alg: 'none', typ: 'JWT' };
+  const payload = {
+    sub: userId,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
+  };
+  const toBase64Url = (obj: any) => {
+    const json = JSON.stringify(obj);
+    // btoa may not exist in SSR; provide a fallback
+    const base64 =
+      typeof btoa === 'function'
+        ? btoa(json)
+        : Buffer.from(json, 'utf-8').toString('base64');
+    return base64.replace(/=+/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  };
+  return `${toBase64Url(header)}.${toBase64Url(payload)}.`; // empty signature
+};
 
 const mockApi = {
   health: async (): Promise<HealthResponse> => {
@@ -76,6 +100,11 @@ const mockApi = {
     await new Promise(resolve => setTimeout(resolve, MOCK_LATENCY_MS));
     console.log("Saving survey data (mock):", data);
     return { status: 'ok', message: 'Risk assessment saved successfully.' };
+  },
+  saveSurveyFull: async (payload: SurveySaveFullRequest): Promise<{ status: string, message: string }> => {
+    await new Promise(resolve => setTimeout(resolve, MOCK_LATENCY_MS));
+    console.log("Saving survey full (mock):", payload);
+    return { status: 'ok', message: 'Saved (mock)' };
   },
   
   predictFused: async (data: FusedPredictRequest): Promise<FusedPredictResponse> => {
@@ -144,7 +173,7 @@ const mockApi = {
   },
   devLogin: async (data: DevLoginRequest): Promise<DevLoginResponse> => {
     await new Promise(resolve => setTimeout(resolve, MOCK_LATENCY_MS));
-    return { access_token: `dev.${data.user_id}.token` };
+    return { access_token: createFakeJwt(data.user_id) };
   }
 };
 
@@ -173,6 +202,15 @@ const liveApi = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify(data),
+        });
+        if (!response.ok) throw new Error('Save survey failed');
+        return response.json();
+    },
+    saveSurveyFull: async (payload: SurveySaveFullRequest): Promise<{ status: string, message: string }> => {
+        const response = await fetch(`${API_BASE_URL}/survey/save_full`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(payload),
         });
         if (!response.ok) throw new Error('Save survey failed');
         return response.json();
@@ -206,6 +244,42 @@ const liveApi = {
         if (!response.ok) {
             throw new Error('Dev login failed');
         }
+        const json = await response.json();
+        // Backend may return { token } whereas frontend expects { access_token }
+        if (json && typeof json === 'object' && 'token' in json && !('access_token' in json)) {
+            return { access_token: json.token } as DevLoginResponse;
+        }
+        return json as DevLoginResponse;
+    },
+    getSurveyHistory: async (limit: number = 20): Promise<SurveyHistoryResponse> => {
+        const response = await fetch(`${API_BASE_URL}/survey/history?limit=${limit}`, {
+            headers: { ...getAuthHeaders() },
+        });
+        if (!response.ok) throw new Error('Fetch history failed');
+        return response.json();
+    },
+    getCalendarEvents: async (date?: string): Promise<CalendarEventServer[]> => {
+        const url = new URL(`${API_BASE_URL}/calendar/events`);
+        if (date) url.searchParams.set('date', date);
+        const response = await fetch(url.toString(), { headers: { ...getAuthHeaders() } });
+        if (!response.ok) throw new Error('Fetch events failed');
+        return response.json();
+    },
+    addCalendarEvent: async (event: CalendarEventCreateServer): Promise<CalendarEventServer> => {
+        const response = await fetch(`${API_BASE_URL}/calendar/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(event),
+        });
+        if (!response.ok) throw new Error('Add event failed');
+        return response.json();
+    },
+    deleteCalendarEvent: async (id: string): Promise<{ status: string }> => {
+        const response = await fetch(`${API_BASE_URL}/calendar/events/${id}`, {
+            method: 'DELETE',
+            headers: { ...getAuthHeaders() },
+        });
+        if (!response.ok) throw new Error('Delete event failed');
         return response.json();
     },
 };

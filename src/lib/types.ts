@@ -82,3 +82,32 @@ export type Achievement = {
   image: string;
   imageHint: string;
 };
+
+// Server-side calendar models (strings for transport)
+export type CalendarEventServer = {
+  id: string;
+  title: string;
+  type: string;
+  date: string; // YYYY-MM-DD
+  start?: string; // HH:mm
+  end?: string;
+  description?: string;
+};
+
+export type CalendarEventCreateServer = Omit<CalendarEventServer, 'id'>;
+
+export type SurveyHistoryItem = {
+  timestamp: string;
+  input: SurveyRequest;
+  result: PredictionResponse | null;
+};
+
+export type SurveyHistoryResponse = {
+  items: SurveyHistoryItem[];
+};
+
+export type SurveySaveFullRequest = {
+  input: SurveyRequest;
+  result?: PredictionResponse | null;
+  timestamp?: string;
+};

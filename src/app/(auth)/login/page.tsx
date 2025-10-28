@@ -11,9 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/use-auth';
 import { DevLoginRequest } from '@/lib/types';
-import { FirebaseError } from 'firebase/app';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+// Firebase login removed for local/dev-only flow
 
 const devLoginSchema = z.object({
   user_id: z.string().min(1, 'User ID is required'),
@@ -24,7 +22,7 @@ type DevLoginFormValues = z.infer<typeof devLoginSchema>;
 export default function LoginPage() {
   const { login } = useAuth();
   const [devLoginError, setDevLoginError] = useState<string | null>(null);
-  const [firebaseError, setFirebaseError] = useState<string | null>(null);
+  const [firebaseError] = useState<string | null>(null);
 
   const { register, handleSubmit, formState: { errors } } = useForm<DevLoginFormValues>({
     resolver: zodResolver(devLoginSchema),
@@ -38,20 +36,7 @@ export default function LoginPage() {
     }
   };
 
-  const onGoogleSignIn = async () => {
-    setFirebaseError(null);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // The auth state change will be handled by the useAuth hook
-    } catch (error) {
-      if (error instanceof FirebaseError) {
-        setFirebaseError(error.message);
-      } else {
-        setFirebaseError('An unknown error occurred during sign-in.');
-      }
-    }
-  };
+  // Google Sign-in removed; use Dev Login below
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -62,19 +47,14 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Button onClick={onGoogleSignIn} className="w-full">Sign in with Google</Button>
-            {firebaseError && <p className="text-sm text-destructive">{firebaseError}</p>}
-          </div>
-          <Separator className="my-6" />
-          <div className="space-y-4">
-            <p className="text-center text-sm text-muted-foreground">For Development</p>
+            <p className="text-center text-sm text-muted-foreground">Dev Login</p>
             <form onSubmit={handleSubmit(onDevLogin)} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="user_id">Dev User ID</Label>
                 <Input id="user_id" {...register('user_id')} />
                 {errors.user_id && <p className="text-sm text-destructive">{errors.user_id.message}</p>}
               </div>
-              <Button type="submit" variant="secondary" className="w-full">Dev Login</Button>
+              <Button type="submit" className="w-full">Sign In</Button>
               {devLoginError && <p className="text-sm text-destructive">{devLoginError}</p>}
             </form>
           </div>
